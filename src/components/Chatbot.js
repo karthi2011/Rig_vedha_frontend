@@ -1,12 +1,14 @@
 import React, {useState, useRef, useEffect} from 'react';
 import ReactMarkdown from "react-markdown";
 
-import { API_BASE } from '../config';
 export default function Chatbot(){
   const [msg, setMsg] = useState('')
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef(null)
+
+  const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
+  const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-lite:generateContent';
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -26,23 +28,48 @@ export default function Chatbot(){
     setLoading(true)
 
     try {
-      const res = await fetch(API_BASE+'/api/chat', {
-        method: 'POST', 
-        headers: {'Content-Type':'application/json'}, 
-        body: JSON.stringify({message: userMessage})
+      if (!GEMINI_API_KEY) {
+        throw new Error('Gemini API key not configured')
+      }
+
+      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are an expert on Rig Vedha. Answer the following question clearly and elaborately. 
+              Focus only on Rig Vedha related topics. If the question is not about Rig Vedha, politely decline to answer or deviate that to rig vedha.
+              
+              Question: ${userMessage}`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1000,
+          }
+        })
       })
       
-      if (!res.ok) {
-        throw new Error('Network response was not ok')
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
       
-      const data = await res.json()
-      setLogs(prev => [...prev, {from:'bot', text: data.reply}])
+      const data = await response.json()
+      
+      if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+        const botResponse = data.candidates[0].content.parts[0].text
+        setLogs(prev => [...prev, {from:'bot', text: botResponse}])
+      } else {
+        throw new Error('Invalid response from Gemini API')
+      }
     } catch (error) {
       console.error('Error sending message:', error)
       setLogs(prev => [...prev, { 
         from: 'bot', 
-        text: 'Sorry, I encountered an error. Please try again later.' 
+        text: 'Sorry, I encountered an error. Please check if the Gemini API key is properly configured.' 
       }])
     } finally {
       setLoading(false)
@@ -58,6 +85,10 @@ export default function Chatbot(){
 
   const clearChat = () => {
     setLogs([])
+  }
+
+  const handleSuggestionClick = (suggestion) => {
+    setMsg(suggestion)
   }
 
   return (
@@ -82,9 +113,24 @@ export default function Chatbot(){
                 I'm here to help you explore this ancient wisdom!
               </p>
               <div style={styles.suggestions}>
-                <div style={styles.suggestion}>Tell me about Rig Vedha</div>
-                <div style={styles.suggestion}>What are the main themes?</div>
-                <div style={styles.suggestion}>Explain the creation hymn</div>
+                <div 
+                  style={styles.suggestion}
+                  onClick={() => handleSuggestionClick('Tell me about Rig Vedha')}
+                >
+                  Tell me about Rig Vedha
+                </div>
+                <div 
+                  style={styles.suggestion}
+                  onClick={() => handleSuggestionClick('What are the main themes in Rig Vedha?')}
+                >
+                  What are the main themes?
+                </div>
+                <div 
+                  style={styles.suggestion}
+                  onClick={() => handleSuggestionClick('Explain the creation hymn in Rig Vedha')}
+                >
+                  Explain the creation hymn
+                </div>
               </div>
             </div>
           ) : (
@@ -111,9 +157,9 @@ export default function Chatbot(){
                   </div>
                   <div style={styles.loadingMessage}>
                     <div style={styles.typingIndicator}>
-                      <div style={styles.typingDot}></div>
-                      <div style={styles.typingDot}></div>
-                      <div style={styles.typingDot}></div>
+                      <div style={{...styles.typingDot, animationDelay: '0s'}}></div>
+                      <div style={{...styles.typingDot, animationDelay: '0.2s'}}></div>
+                      <div style={{...styles.typingDot, animationDelay: '0.4s'}}></div>
                     </div>
                     <span style={styles.typingText}>Thinking about Rig Vedha...</span>
                   </div>
@@ -404,18 +450,10 @@ style.textContent = `
     transform: translateY(-1px);
   }
   
-  .clear-button:hover {
-    background: #b91c1c;
-    color: white;
-  }
-  
   input:focus {
     outline: none;
     border-color: #b91c1c;
     box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.1);
   }
-  
-  .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-  .typing-dot:nth-child(2) { animation-delay: -0.16s; }
 `;
 document.head.appendChild(style);
