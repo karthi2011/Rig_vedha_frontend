@@ -1,8 +1,7 @@
 import React, {useState, useRef, useEffect} from 'react';
 import ReactMarkdown from "react-markdown";
 
-const API_BASE = "http://localhost:5000";
-
+import { API_BASE } from '../config';
 export default function Chatbot(){
   const [msg, setMsg] = useState('')
   const [logs, setLogs] = useState([])
